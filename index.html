@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>電子廠採購案件儀表板</title>
+    <title>電子廠採購案件儀表板 (雲端同步版)</title>
     <style>
         :root {
             --primary: #4f46e5;
@@ -65,9 +65,10 @@
             white-space: nowrap;
         }
 
-        .compact-upload-btn {
+        /* 改良後的雲端同步按鈕樣式 */
+        .sync-btn {
             background: var(--bg-card);
-            border: 1px dashed #cbd5e1;
+            border: 1px solid #cbd5e1;
             padding: 0.4rem 1rem;
             border-radius: 6px;
             font-size: 0.85rem;
@@ -81,10 +82,15 @@
             user-select: none;
         }
 
-        .compact-upload-btn:hover, .compact-upload-btn.dragover {
+        .sync-btn:hover {
             border-color: var(--primary);
             background: var(--primary-light);
             color: var(--primary);
+        }
+
+        .sync-btn.loading {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .header-status {
@@ -152,7 +158,7 @@
         .filter-group-header {
             display: flex;
             align-items: center;
-            gap: 0.75rem; /* 設定標題與控制項的精緻間距（已往左移） */
+            gap: 0.75rem;
             margin-bottom: 0.5rem;
         }
 
@@ -278,7 +284,6 @@
             color: #334155;
         }
 
-        /* 確保承辦人等欄位寬度足夠且不強制換行，完美展現難字 */
         #mainTableBody td:nth-child(6) {
             white-space: nowrap;
             min-width: 80px;
@@ -417,14 +422,13 @@
         }
     </style>
 </head>
-<body id="dropZone"> 
+<body> 
     <header>
         <div class="header-left">
-            <h1>電子廠採購案件儀表板</h1><p style="color: gray; font-size: 12px;">20260624v6</p>
-            <div class="compact-upload-btn" onclick="document.getElementById('fileInput').click()">
-                🏭 <span id="uploadBtnText">選擇或拖曳 CSV 檔案</span>
+            <h1>電子廠採購案件儀表板</h1><p style="color: gray; font-size: 12px;">20260624_Cloud</p>
+            <div id="syncBtn" class="sync-btn" onclick="fetchCloudData()">
+                🔄 <span id="uploadBtnText">正在連線雲端試算表...</span>
             </div>
-            <input type="file" id="fileInput" accept=".csv" style="display: none;">
         </div>
         <div id="fileStatusBadge" class="header-status"></div>
     </header>
@@ -571,6 +575,8 @@
     </div>
 
     <script>
+        // 💡 【關鍵設定】請將下方引號內的網址，替換成你從 Google 試算表「發布到網路」取得的 CSV 連結。
+        const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1IB0uDOq-aRSY_UZDvAT1Fr-aYvCkij8Sl-rX-k1rHY0/export?format=csv&gid=512737477";
         const Papa = {
             parse: function(text, config) {
                 let lines = [];
@@ -615,16 +621,9 @@
                         let val = lines[i][index] !== undefined ? lines[i][index].trim() : '';
                         val = val.replace(/^["']|["']$/g, '');
                         
-                        // 難字自動攔截與對照更正機制
                         if (header === "承辦人") {
-                            if (val.startsWith("陳柏?") && (val.length === 2 || val.endsWith("?") || val.endsWith(""))) {
-                                val = "陳柏勲";
-                            }
-                        }
-			if (header === "承辦人") {
-                            if (val.startsWith("古岳?") && (val.length === 2 || val.endsWith("?") || val.endsWith(""))) {
-                                val = "古岳峯";
-                            }
+                            if (val.startsWith("陳柏?") || val === "陳柏") val = "陳柏勲";
+                            if (val.startsWith("古岳?") || val === "古岳") val = "古岳峯";
                         }
                         
                         obj[header] = (val === '-' || val === '' || val === 'NaN') ? '—' : val;
@@ -640,58 +639,45 @@
         let selectedAttributes = new Set();
         const VALID_STATUSES = ["尚未開始", "備標", "陳核", "履約", "結案"];
 
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const uploadBtn = document.querySelector('.compact-upload-btn');
+        // 雲端異步抓取主函式
+        async function fetchCloudData() {
+            const syncBtn = document.getElementById('syncBtn');
+            const btnText = document.getElementById('uploadBtnText');
+            const errBox = document.getElementById('errorMsg');
+            
+            syncBtn.classList.add('loading');
+            btnText.textContent = "正在抓取最新雲端數據...";
+            errBox.style.display = 'none';
 
-        ['dragenter', 'dragover'].forEach(name => {
-            dropZone.addEventListener(name, (e) => { 
-                e.preventDefault(); 
-                uploadBtn.classList.add('dragover'); 
-            });
-        });
-        ['dragleave', 'drop'].forEach(name => {
-            dropZone.addEventListener(name, (e) => { 
-                e.preventDefault(); 
-                uploadBtn.classList.remove('dragover'); 
-            });
-        });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
-        });
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) handleFile(e.target.files[0]);
-        });
-
-        function handleFile(file) {
-            if (!file.name.toLowerCase().endsWith('.csv')) {
-                alert('請上傳標準的 CSV 檔案。');
-                return;
+            try {
+                // 為了防瀏覽器快取舊資料，網址加上時間戳記強制更新
+                const response = await fetch(`${SPREADSHEET_CSV_URL}&t=${new Date().getTime()}`);
+                if (!response.ok) throw new Error('連線試算表失敗，請檢查網路或發布網址。');
+                
+                // 1. 改用 arrayBuffer 接收原始二進位資料
+    const buffer = await response.arrayBuffer();
+    
+    // 2. 強制使用 utf-8 解碼器來轉換成中文文字，徹底解決亂碼問題
+    const decoder = new TextDecoder('utf-8');
+    const csvText = decoder.decode(buffer);
+    
+    // 3. 送入解析
+    processCSV(csvText);
+            } catch (error) {
+                showError(`同步失敗: ${error.message}。請確認試算表是否已正確「發布到網路」為 CSV 格式。`);
+                btnText.textContent = "同步失敗，點選重試";
+                syncBtn.classList.remove('loading');
             }
-
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                let text = evt.target.result;
-                if (text.includes('') || !text.includes('組別')) {
-                    const readerBig5 = new FileReader();
-                    readerBig5.onload = function(e2) {
-                        processCSV(e2.target.result, file.name);
-                    };
-                    readerBig5.readAsText(file, 'Big5');
-                } else {
-                    processCSV(text, file.name);
-                }
-            };
-            reader.readAsText(file, 'UTF-8');
         }
 
-        function processCSV(text, fileName) {
+        function processCSV(text) {
             Papa.parse(text, {
                 complete: function(results) {
                     let data = results.data;
-                    if (!data || data.length === 0) {
-                        showError("解析失敗：未能讀取到有效的 CSV 資料欄位。");
+                    if (!data || data.length === 0 || !data[0]["組別"]) {
+                        showError("解析失敗：抓取到的試算表內容欄位不正確，請確認發布的工作表是否包含「組別」等欄位。");
+                        document.getElementById('uploadBtnText').textContent = "同步失敗";
+                        document.getElementById('syncBtn').classList.remove('loading');
                         return;
                     }
 
@@ -709,14 +695,14 @@
 
                     currentLoadedData = data;
                     
-                    document.getElementById('errorMsg').style.display = 'none';
                     document.getElementById('workspace').style.display = 'block';
                     
                     const statusBadge = document.getElementById('fileStatusBadge');
-                    statusBadge.textContent = `✅ 已載入採購檔案: ${fileName}`;
+                    statusBadge.textContent = `✅ 雲端同步成功 (${new Date().toLocaleTimeString()})`;
                     statusBadge.style.display = 'block';
                     
-                    document.getElementById('uploadBtnText').textContent = "更新 CSV 檔案";
+                    document.getElementById('uploadBtnText').textContent = "同步雲端資料";
+                    document.getElementById('syncBtn').classList.remove('loading');
 
                     initFilters();
                     filterAndRender();
@@ -733,7 +719,12 @@
         function initFilters() {
             const statuses = VALID_STATUSES.filter(s => currentLoadedData.some(item => item["狀態"] === s));
             const attrKey = currentLoadedData[0] && currentLoadedData[0]["屬性"] !== undefined ? "屬性" : "類別";
-            const attributes = [...new Set(currentLoadedData.map(item => item[attrKey]).filter(v => v && v !== '—'))];
+            
+            // 修改此處：將 '—' 或空值轉換為 '未分類' 納入篩選
+            const attributes = [...new Set(currentLoadedData.map(item => {
+                let val = item[attrKey];
+                return (val === '—' || !val) ? '未分類' : val;
+            }))];
 
             selectedStatuses = new Set(statuses);
             selectedAttributes = new Set(attributes);
@@ -793,7 +784,11 @@
         function filterAndRender() {
             const attrKey = currentLoadedData[0] && currentLoadedData[0]["屬性"] !== undefined ? "屬性" : "類別";
             const filtered = currentLoadedData.filter(item => {
-                return selectedStatuses.has(item["狀態"]) && selectedAttributes.has(item[attrKey]);
+                // 修改此處：比對時，如果案件屬性是 '—' 或空，則對應到篩選器的 '未分類'
+                let itemAttr = item[attrKey];
+                let mappedAttr = (itemAttr === '—' || !itemAttr) ? '未分類' : itemAttr;
+                
+                return selectedStatuses.has(item["狀態"]) && selectedAttributes.has(mappedAttr);
             });
 
             document.getElementById('recordCount').textContent = `共 ${filtered.length} 筆`;
@@ -870,6 +865,11 @@
             document.getElementById('detailContentState').style.display = 'none';
             document.getElementById('detailSubtitle').textContent = '請由左側點選資料列查看完整內容';
         }
+
+        // 頁面載入完成後立即自動讀取雲端試算表
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchCloudData();
+        });
     </script>
 </body>
 </html>
