@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電子廠採購案件儀表板 (雲端同步版)</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --primary-light: #eef2ff;
+            --bg-main: #f8fafc;
+            --bg-card: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        html, body {
+            height: 100%;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            padding: 1rem 1.5rem;
+        }
+
+        header {
+            background: var(--bg-card);
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        h1 {
+            font-size: 1.3rem;
+            color: var(--text-main);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        /* 改良後的雲端同步按鈕樣式 */
+        .sync-btn {
+            background: var(--bg-card);
+            border: 1px solid #cbd5e1;
+            padding: 0.4rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #334155;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            user-select: none;
+        }
+
+        .sync-btn:hover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .sync-btn.loading {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .header-status {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--success);
+            background: #ecfdf5;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid #a7f3d0;
+            white-space: nowrap;
+            display: none;
+        }
+
+        #errorMsg {
+            background: #fff7ed;
+            border-left: 4px solid var(--warning);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: #c2410c;
+            display: none;
+            flex-shrink: 0;
+        }
+
+        #workspace {
+            display: none;
+            flex: 1;
+            height: calc(100% - 75px);
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 65% 35%;
+            gap: 1rem;
+            height: 100%;
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .right-panel {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .filter-section {
+            background: var(--bg-card);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            display: grid;
+            grid-template-columns: 30% 70%;
+            gap: 1rem;
+            flex-shrink: 0;
+        }
+
+        .filter-group-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .filter-group-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #475569;
+        }
+
+        .filter-actions {
+            font-size: 0.75rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .action-link {
+            color: var(--primary);
+            cursor: pointer;
+            user-select: none;
+            font-weight: 600;
+        }
+
+        .action-link:hover {
+            text-decoration: underline;
+            color: var(--primary-hover);
+        }
+
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+
+        .filter-btn {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: #475569;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s ease;
+        }
+
+        .filter-btn:hover {
+            background: #e2e8f0;
+        }
+
+        .filter-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #ffffff;
+        }
+
+        .table-container {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .table-header-box {
+            padding: 0.75rem 1.25rem;
+            background: #f8fafc;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .table-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .badge {
+            background: #e2e8f0;
+            color: #475569;
+            padding: 0.2rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .table-responsive {
+            overflow: auto;
+            flex: 1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background: #f1f5f9;
+            z-index: 10;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        th {
+            padding: 0.6rem 0.75rem;
+            font-weight: 600;
+            color: #475569;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+
+        #mainTableBody td:nth-child(6) {
+            white-space: nowrap;
+            min-width: 80px;
+            font-weight: 500;
+        }
+
+        tr.clickable-row {
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        tr.clickable-row:hover {
+            background-color: #f8fafc;
+        }
+
+        tr.selected-row {
+            background-color: #e0e7ff !important;
+        }
+
+        .status-tag {
+            display: inline-block;
+            padding: 0.125rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--primary-light);
+            color: var(--primary);
+            border: 1px solid #c7d2fe;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .mono {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--primary);
+        }
+
+        .remark-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            min-width: 250px;
+            line-height: 1.4;
+            white-space: pre-line;
+            word-break: break-all;
+        }
+
+        .detail-section {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .detail-header {
+            padding: 1rem 1.25rem;
+            background: #f5f3ff;
+            border-bottom: 1px solid #ede9fe;
+            flex-shrink: 0;
+        }
+
+        .detail-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #4c1d95;
+        }
+
+        .detail-subtitle {
+            font-size: 0.75rem;
+            color: #6d28d9;
+            opacity: 0.7;
+            margin-top: 0.125rem;
+        }
+
+        .empty-state {
+            padding: 4rem 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            flex: 1;
+        }
+
+        .empty-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.5;
+        }
+
+        .detail-scroll-content {
+            overflow-y: auto;
+            flex: 1;
+            padding: 1.25rem;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .detail-item-box {
+            background: #f8fafc;
+            padding: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid #f1f5f9;
+        }
+
+        .detail-item-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+            letter-spacing: 0.05em;
+        }
+
+        .detail-item-value {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-main);
+            word-break: break-all;
+        }
+
+        .amount-highlight {
+            color: var(--success);
+            font-weight: 700;
+        }
+
+        .col-span-full {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body> 
+    <header>
+        <div class="header-left">
+            <h1>電子廠採購案件儀表板</h1><p style="color: gray; font-size: 12px;">20260624_Cloud</p>
+            <div id="syncBtn" class="sync-btn" onclick="fetchCloudData()">
+                🔄 <span id="uploadBtnText">正在連線雲端試算表...</span>
+            </div>
+        </div>
+        <div id="fileStatusBadge" class="header-status"></div>
+    </header>
+
+    <div id="errorMsg"></div>
+
+    <div id="workspace">
+        <div class="main-layout">
+            
+            <div class="left-panel">
+                <div class="filter-section">
+                    <div>
+                        <div class="filter-group-header">
+                            <div class="filter-group-title">依 狀態 篩選</div>
+                        </div>
+                        <div id="statusFilters" class="filter-options"></div>
+                    </div>
+                    <div>
+                        <div class="filter-group-header">
+                            <div class="filter-group-title">依 屬性/類別 篩選</div>
+                            <div id="attributeActions" class="filter-actions"></div>
+                        </div>
+                        <div id="attributeFilters" class="filter-options"></div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header-box">
+                        <div class="table-title">採購案件清單</div>
+                        <span id="recordCount" class="badge">共 0 筆</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>組別</th>
+                                    <th>類別</th>
+                                    <th>狀態</th>
+                                    <th>案號</th>
+                                    <th>案名</th>
+                                    <th>承辦人</th>
+                                    <th class="text-right">預算金額</th>
+                                    <th>辦理情形</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mainTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="detail-section">
+                    <div class="detail-header">
+                        <div class="detail-title">案件詳細時程與明細</div>
+                        <div class="detail-subtitle" id="detailSubtitle">請由左側點選資料列查看完整內容</div>
+                    </div>
+                    
+                    <div id="detailEmptyState" class="empty-state">
+                        <div class="empty-icon">📋</div>
+                        <p>尚未選取任何案件</p>
+                    </div>
+
+                    <div id="detailContentState" class="detail-scroll-content" style="display: none;">
+                        <div class="detail-grid">
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">請購預計到處</div>
+                                <div id="det_arrival" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">請購預計奉核</div>
+                                <div id="det_approval" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">預計決標日</div>
+                                <div id="det_est_award" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">申請日期</div>
+                                <div id="det_apply_date" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">核定日期</div>
+                                <div id="det_verify_date" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">決標日</div>
+                                <div id="det_award_date" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">決標金額</div>
+                                <div id="det_award_amt" class="detail-item-value amount-highlight">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">得標廠商</div>
+                                <div id="det_vendor" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">履約到期日</div>
+                                <div id="det_expire" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">招標案件預計公告</div>
+                                <div id="det_est_announce" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">招標案件預計決標</div>
+                                <div id="det_est_final" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">是否為計畫性</div>
+                                <div id="det_is_planned" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">是否為連續性</div>
+                                <div id="det_is_continuous" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">屬性</div>
+                                <div id="det_attribute" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">請購分類</div>
+                                <div id="det_req_category" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box">
+                                <div class="detail-item-title">採購方式</div>
+                                <div id="det_proc_method" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box col-span-full">
+                                <div class="detail-item-title">預算源</div>
+                                <div id="det_budget_source" class="detail-item-value">—</div>
+                            </div>
+                            <div class="detail-item-box col-span-full">
+                                <div class="detail-item-title">完整辦理情形</div>
+                                <div id="det_full_remark" class="detail-item-value" style="white-space: pre-line; line-height: 1.5; color: #475569;">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // 💡 【關鍵設定】請將下方引號內的網址，替換成你從 Google 試算表「發布到網路」取得的 CSV 連結。
+        const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1IB0uDOq-aRSY_UZDvAT1Fr-aYvCkij8Sl-rX-k1rHY0/export?format=csv&gid=512737477";
+        const Papa = {
+            parse: function(text, config) {
+                let lines = [];
+                let row = [""];
+                let inQuotes = false;
+                
+                for (let i = 0; i < text.length; i++) {
+                    let char = text[i];
+                    let nextChar = text[i+1];
+                    
+                    if (char === '"') {
+                        if (inQuotes && nextChar === '"') {
+                            row[row.length - 1] += '"';
+                            i++;
+                        } else {
+                            inQuotes = !inQuotes;
+                        }
+                    } else if (char === ',' && !inQuotes) {
+                        row.push('');
+                    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                        if (char === '\r' && nextChar === '\n') { i++; }
+                        lines.push(row);
+                        row = [''];
+                    } else {
+                        row[row.length - 1] += char;
+                    }
+                }
+                if (row.length > 1 || row[0] !== '') { lines.push(row); }
+                
+                if (lines.length === 0) return { data: [] };
+                
+                let headers = lines[0].map(h => h.trim().replace(/^["']|["']$/g, ''));
+                if (headers[0] && headers[0].charCodeAt(0) === 0xFEFF) {
+                    headers[0] = headers[0].substring(1);
+                }
+                
+                let resultData = [];
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i].length < headers.length || (lines[i].length === 1 && lines[i][0] === '')) continue;
+                    let obj = {};
+                    headers.forEach((header, index) => {
+                        let val = lines[i][index] !== undefined ? lines[i][index].trim() : '';
+                        val = val.replace(/^["']|["']$/g, '');
+                        
+                        if (header === "承辦人") {
+                            if (val.startsWith("陳柏?") || val === "陳柏") val = "陳柏勲";
+                            if (val.startsWith("古岳?") || val === "古岳") val = "古岳峯";
+                        }
+                        
+                        obj[header] = (val === '-' || val === '' || val === 'NaN') ? '—' : val;
+                    });
+                    resultData.push(obj);
+                }
+                config.complete({ data: resultData });
+            }
+        };
+
+        let currentLoadedData = [];
+        let selectedStatuses = new Set();
+        let selectedAttributes = new Set();
+        const VALID_STATUSES = ["尚未開始", "備標", "陳核", "履約", "結案"];
+
+        // 雲端異步抓取主函式
+        async function fetchCloudData() {
+            const syncBtn = document.getElementById('syncBtn');
+            const btnText = document.getElementById('uploadBtnText');
+            const errBox = document.getElementById('errorMsg');
+            
+            syncBtn.classList.add('loading');
+            btnText.textContent = "正在抓取最新雲端數據...";
+            errBox.style.display = 'none';
+
+            try {
+                // 為了防瀏覽器快取舊資料，網址加上時間戳記強制更新
+                const response = await fetch(`${SPREADSHEET_CSV_URL}&t=${new Date().getTime()}`);
+                if (!response.ok) throw new Error('連線試算表失敗，請檢查網路或發布網址。');
+                
+                // 1. 改用 arrayBuffer 接收原始二進位資料
+    const buffer = await response.arrayBuffer();
+    
+    // 2. 強制使用 utf-8 解碼器來轉換成中文文字，徹底解決亂碼問題
+    const decoder = new TextDecoder('utf-8');
+    const csvText = decoder.decode(buffer);
+    
+    // 3. 送入解析
+    processCSV(csvText);
+            } catch (error) {
+                showError(`同步失敗: ${error.message}。請確認試算表是否已正確「發布到網路」為 CSV 格式。`);
+                btnText.textContent = "同步失敗，點選重試";
+                syncBtn.classList.remove('loading');
+            }
+        }
+
+        function processCSV(text) {
+            Papa.parse(text, {
+                complete: function(results) {
+                    let data = results.data;
+                    if (!data || data.length === 0 || !data[0]["組別"]) {
+                        showError("解析失敗：抓取到的試算表內容欄位不正確，請確認發布的工作表是否包含「組別」等欄位。");
+                        document.getElementById('uploadBtnText').textContent = "同步失敗";
+                        document.getElementById('syncBtn').classList.remove('loading');
+                        return;
+                    }
+
+                    data.forEach(item => {
+                        if (item["狀態"]) {
+                            VALID_STATUSES.forEach(s => {
+                                if (item["狀態"].includes(s)) item["狀態"] = s;
+                            });
+                        }
+                        if (item["預計決標日"] === '—' && item["辦理情形"] && item["辦理情形"].includes("預計陳核日")) {
+                            let match = item["辦理情形"].match(/預計陳核日：(\d{3}\/\d{2}\/\d{2})/);
+                            if (match) item["請購預計奉核"] = match[1];
+                        }
+                    });
+
+                    currentLoadedData = data;
+                    
+                    document.getElementById('workspace').style.display = 'block';
+                    
+                    const statusBadge = document.getElementById('fileStatusBadge');
+                    statusBadge.textContent = `✅ 雲端同步成功 (${new Date().toLocaleTimeString()})`;
+                    statusBadge.style.display = 'block';
+                    
+                    document.getElementById('uploadBtnText').textContent = "同步雲端資料";
+                    document.getElementById('syncBtn').classList.remove('loading');
+
+                    initFilters();
+                    filterAndRender();
+                }
+            });
+        }
+
+        function showError(msg) {
+            const errBox = document.getElementById('errorMsg');
+            errBox.textContent = msg;
+            errBox.style.display = 'block';
+        }
+
+        function initFilters() {
+            const statuses = VALID_STATUSES.filter(s => currentLoadedData.some(item => item["狀態"] === s));
+            const attrKey = currentLoadedData[0] && currentLoadedData[0]["屬性"] !== undefined ? "屬性" : "類別";
+            
+            // 修改此處：將 '—' 或空值轉換為 '未分類' 納入篩選
+            const attributes = [...new Set(currentLoadedData.map(item => {
+                let val = item[attrKey];
+                return (val === '—' || !val) ? '未分類' : val;
+            }))];
+
+            selectedStatuses = new Set(statuses);
+            selectedAttributes = new Set(attributes);
+
+            renderFilterButtons('statusFilters', statuses, selectedStatuses, () => filterAndRender());
+            renderFilterButtons('attributeFilters', attributes, selectedAttributes, () => filterAndRender(), 'attributeActions');
+        }
+
+        function renderFilterButtons(containerId, items, trackingSet, onChange, actionContainerId = null) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+
+            if (actionContainerId) {
+                const actionContainer = document.getElementById(actionContainerId);
+                actionContainer.innerHTML = '';
+
+                const selectAll = document.createElement('span');
+                selectAll.className = 'action-link';
+                selectAll.textContent = '全選';
+                selectAll.addEventListener('click', () => {
+                    items.forEach(item => trackingSet.add(item));
+                    renderFilterButtons(containerId, items, trackingSet, onChange, actionContainerId);
+                    onChange();
+                });
+
+                const deselectAll = document.createElement('span');
+                deselectAll.className = 'action-link';
+                deselectAll.textContent = '取消全選';
+                deselectAll.addEventListener('click', () => {
+                    trackingSet.clear();
+                    renderFilterButtons(containerId, items, trackingSet, onChange, actionContainerId);
+                    onChange();
+                });
+
+                actionContainer.appendChild(selectAll);
+                actionContainer.appendChild(document.createTextNode(' | '));
+                actionContainer.appendChild(deselectAll);
+            }
+
+            items.forEach(item => {
+                const btn = document.createElement('div');
+                btn.className = `filter-btn ${trackingSet.has(item) ? 'active' : ''}`;
+                btn.textContent = item;
+                btn.addEventListener('click', () => {
+                    if (trackingSet.has(item)) {
+                        trackingSet.delete(item);
+                    } else {
+                        trackingSet.add(item);
+                    }
+                    renderFilterButtons(containerId, items, trackingSet, onChange, actionContainerId);
+                    onChange();
+                });
+                container.appendChild(btn);
+            });
+        }
+
+        function filterAndRender() {
+            const attrKey = currentLoadedData[0] && currentLoadedData[0]["屬性"] !== undefined ? "屬性" : "類別";
+            const filtered = currentLoadedData.filter(item => {
+                // 修改此處：比對時，如果案件屬性是 '—' 或空，則對應到篩選器的 '未分類'
+                let itemAttr = item[attrKey];
+                let mappedAttr = (itemAttr === '—' || !itemAttr) ? '未分類' : itemAttr;
+                
+                return selectedStatuses.has(item["狀態"]) && selectedAttributes.has(mappedAttr);
+            });
+
+            document.getElementById('recordCount').textContent = `共 ${filtered.length} 筆`;
+            renderTable(filtered);
+            resetDetails();
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('mainTableBody');
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--text-muted);">無符合篩選條件的採購案件</td></tr>`;
+                return;
+            }
+
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable-row';
+                
+                tr.addEventListener('click', () => {
+                    document.querySelectorAll('#mainTableBody tr').forEach(r => r.classList.remove('selected-row'));
+                    tr.classList.add('selected-row');
+                    showDetails(item);
+                });
+
+                let textRemark = (item["辦理情形"] || '—');
+
+                tr.innerHTML = `
+                    <td>${item["組別"] || '—'}</td>
+                    <td>${item["類別"] || '—'}</td>
+                    <td><span class="status-tag">${item["狀態"] || '—'}</span></td>
+                    <td class="mono">${item["案號"] || '—'}</td>
+                    <td style="font-weight:600; min-width: 120px;">${item["案名"] || '—'}</td>
+                    <td>${item["承辦人"] || '—'}</td>
+                    <td class="text-right" style="font-weight:600;">${item["預算金額"] || '—'}</td>
+                    <td><div class="remark-text">${textRemark}</div></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function showDetails(item) {
+            document.getElementById('detailEmptyState').style.display = 'none';
+            const content = document.getElementById('detailContentState');
+            content.style.display = 'block';
+
+            document.getElementById('detailSubtitle').textContent = `正在檢視：${item["案號"] || '—'}  ${item["案名"] || '—'}`;
+
+            document.getElementById('det_arrival').textContent = item["請購預計到處"] || '—';
+            document.getElementById('det_approval').textContent = item["請購預計奉核"] || '—';
+            document.getElementById('det_est_award').textContent = item["預計決標日"] || '—';
+            document.getElementById('det_apply_date').textContent = item["申請日期"] || '—';
+            document.getElementById('det_verify_date').textContent = item["核定日期"] || '—';
+            document.getElementById('det_award_date').textContent = item["決標日"] || '—';
+            document.getElementById('det_award_amt').textContent = item["決標金額"] || '—';
+            document.getElementById('det_vendor').textContent = item["得標廠商"] || '—';
+            document.getElementById('det_expire').textContent = item["履約到期日"] || '—';
+
+            document.getElementById('det_est_announce').textContent = item["招標案件預計公告"] || '—';
+            document.getElementById('det_est_final').textContent = item["招標案件預計決標"] || '—';
+            document.getElementById('det_is_planned').textContent = item["是否為計畫性"] || '—';
+            document.getElementById('det_is_continuous').textContent = item["是否為連續性"] || '—';
+            document.getElementById('det_attribute').textContent = item["屬性"] || '—';
+            document.getElementById('det_req_category').textContent = item["請購分類"] || '—';
+            document.getElementById('det_proc_method').textContent = item["採購方式"] || '—';
+            document.getElementById('det_budget_source').textContent = item["預算源"] || '—';
+            
+            document.getElementById('det_full_remark').textContent = item["辦理情形"] || '—';
+        }
+
+        function resetDetails() {
+            document.getElementById('detailEmptyState').style.display = 'block';
+            document.getElementById('detailContentState').style.display = 'none';
+            document.getElementById('detailSubtitle').textContent = '請由左側點選資料列查看完整內容';
+        }
+
+        // 頁面載入完成後立即自動讀取雲端試算表
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchCloudData();
+        });
+    </script>
+</body>
+</html>
