@@ -65,7 +65,6 @@
             white-space: nowrap;
         }
 
-        /* 改良後的雲端同步按鈕樣式 */
         .sync-btn {
             background: var(--bg-card);
             border: 1px solid #cbd5e1;
@@ -149,10 +148,48 @@
             border-radius: 12px;
             border: 1px solid var(--border-color);
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .filter-search-box {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 0.75rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .filter-search-input {
+            width: 100%;
+            padding: 0.45rem 0.75rem 0.45rem 2.2rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            color: var(--text-main);
+            background: #f8fafc;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .filter-search-input:focus {
+            background: #ffffff;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+        }
+
+        .filter-categories-grid {
             display: grid;
             grid-template-columns: 30% 70%;
             gap: 1rem;
-            flex-shrink: 0;
         }
 
         .filter-group-header {
@@ -440,18 +477,26 @@
             
             <div class="left-panel">
                 <div class="filter-section">
-                    <div>
-                        <div class="filter-group-header">
-                            <div class="filter-group-title">依 狀態 篩選</div>
-                        </div>
-                        <div id="statusFilters" class="filter-options"></div>
+                    <!-- 搜尋欄位 -->
+                    <div class="filter-search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchInput" class="filter-search-input" placeholder="搜尋組別、案號、案名、承辦人..." oninput="filterAndRender()">
                     </div>
-                    <div>
-                        <div class="filter-group-header">
-                            <div class="filter-group-title">依 屬性/類別 篩選</div>
-                            <div id="attributeActions" class="filter-actions"></div>
+
+                    <div class="filter-categories-grid">
+                        <div>
+                            <div class="filter-group-header">
+                                <div class="filter-group-title">依 狀態 篩選</div>
+                            </div>
+                            <div id="statusFilters" class="filter-options"></div>
                         </div>
-                        <div id="attributeFilters" class="filter-options"></div>
+                        <div>
+                            <div class="filter-group-header">
+                                <div class="filter-group-title">依 屬性/類別 篩選</div>
+                                <div id="attributeActions" class="filter-actions"></div>
+                            </div>
+                            <div id="attributeFilters" class="filter-options"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -575,7 +620,6 @@
     </div>
 
     <script>
-        // 💡 【關鍵設定】請將下方引號內的網址，替換成你從 Google 試算表「發布到網路」取得的 CSV 連結。
         const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1IB0uDOq-aRSY_UZDvAT1Fr-aYvCkij8Sl-rX-k1rHY0/export?format=csv&gid=512737477";
         const Papa = {
             parse: function(text, config) {
@@ -639,7 +683,6 @@
         let selectedAttributes = new Set();
         const VALID_STATUSES = ["尚未開始", "備標", "陳核", "履約", "結案"];
 
-        // 雲端異步抓取主函式
         async function fetchCloudData() {
             const syncBtn = document.getElementById('syncBtn');
             const btnText = document.getElementById('uploadBtnText');
@@ -650,19 +693,14 @@
             errBox.style.display = 'none';
 
             try {
-                // 為了防瀏覽器快取舊資料，網址加上時間戳記強制更新
                 const response = await fetch(`${SPREADSHEET_CSV_URL}&t=${new Date().getTime()}`);
                 if (!response.ok) throw new Error('連線試算表失敗，請檢查網路或發布網址。');
                 
-                // 1. 改用 arrayBuffer 接收原始二進位資料
-    const buffer = await response.arrayBuffer();
-    
-    // 2. 強制使用 utf-8 解碼器來轉換成中文文字，徹底解決亂碼問題
-    const decoder = new TextDecoder('utf-8');
-    const csvText = decoder.decode(buffer);
-    
-    // 3. 送入解析
-    processCSV(csvText);
+                const buffer = await response.arrayBuffer();
+                const decoder = new TextDecoder('utf-8');
+                const csvText = decoder.decode(buffer);
+                
+                processCSV(csvText);
             } catch (error) {
                 showError(`同步失敗: ${error.message}。請確認試算表是否已正確「發布到網路」為 CSV 格式。`);
                 btnText.textContent = "同步失敗，點選重試";
@@ -720,7 +758,6 @@
             const statuses = VALID_STATUSES.filter(s => currentLoadedData.some(item => item["狀態"] === s));
             const attrKey = currentLoadedData[0] && currentLoadedData[0]["屬性"] !== undefined ? "屬性" : "類別";
             
-            // 修改此處：將 '—' 或空值轉換為 '未分類' 納入篩選
             const attributes = [...new Set(currentLoadedData.map(item => {
                 let val = item[attrKey];
                 return (val === '—' || !val) ? '未分類' : val;
@@ -783,12 +820,29 @@
 
         function filterAndRender() {
             const attrKey = currentLoadedData[0] && currentLoadedData[0]["屬性"] !== undefined ? "屬性" : "類別";
+            const searchKeyword = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+
             const filtered = currentLoadedData.filter(item => {
-                // 修改此處：比對時，如果案件屬性是 '—' 或空，則對應到篩選器的 '未分類'
                 let itemAttr = item[attrKey];
                 let mappedAttr = (itemAttr === '—' || !itemAttr) ? '未分類' : itemAttr;
                 
-                return selectedStatuses.has(item["狀態"]) && selectedAttributes.has(mappedAttr);
+                const matchesStatus = selectedStatuses.has(item["狀態"]);
+                const matchesAttr = selectedAttributes.has(mappedAttr);
+
+                let matchesSearch = true;
+                if (searchKeyword) {
+                    const group = (item["組別"] || '').toLowerCase();
+                    const code = (item["案號"] || '').toLowerCase();
+                    const name = (item["案名"] || '').toLowerCase();
+                    const handler = (item["承辦人"] || '').toLowerCase();
+
+                    matchesSearch = group.includes(searchKeyword) ||
+                                    code.includes(searchKeyword) ||
+                                    name.includes(searchKeyword) ||
+                                    handler.includes(searchKeyword);
+                }
+
+                return matchesStatus && matchesAttr && matchesSearch;
             });
 
             document.getElementById('recordCount').textContent = `共 ${filtered.length} 筆`;
@@ -866,7 +920,6 @@
             document.getElementById('detailSubtitle').textContent = '請由左側點選資料列查看完整內容';
         }
 
-        // 頁面載入完成後立即自動讀取雲端試算表
         window.addEventListener('DOMContentLoaded', () => {
             fetchCloudData();
         });
